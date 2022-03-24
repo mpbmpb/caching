@@ -23,7 +23,16 @@ public class MemoryCache<T>
     
     public async Task<bool> Add(object key, T value)
     {
+        if (_dictionary.Count >= _options.SizeLimit)
+        {
+            var pruned = await TryPrune();
+            if (!pruned)
+                return false;
+        }
         var success =_dictionary.TryAdd(key, value);
+        if (success)
+            _keyQueue.Enqueue(key);
+        
         return success;
     }
 
@@ -32,5 +41,11 @@ public class MemoryCache<T>
         var success = _dictionary.TryGetValue(key, out var value);
         
         return (success, value!);
+    }
+
+    public async Task<bool> TryPrune()
+    {
+        _keyQueue.TryDequeue(out var key);
+        return _dictionary.TryRemove(key, out var _);
     }
 }

@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace simplecache.tests.unit;
 
 public class MemoryCacheTests
@@ -17,19 +19,54 @@ public class MemoryCacheTests
         result.Should().Be((true, value));
     }
 
-    [Fact]
-    public async Task Add_ShouldEvictOldestEntry_WhenSizeLimitIsReached()
+    [Theory]
+    [InlineData(2)]
+    [InlineData(8)]
+    [InlineData(42)]
+    [InlineData(2132)]
+    public async Task Add_ShouldEvictOldestEntry_WhenSizeLimitIsReached(int sizeLimit)
     {
         var sut = new MemoryCache<string>(new CacheOptions {SizeLimit = 2});
 
-        await sut.Add(1, "1");
-        await sut.Add(2, "2");
-        await sut.Add(3, "3");
+        for (int i = 0; i <= sizeLimit; i++)
+        {
+            await sut.Add(i, $"test entry #{i}");
+        }
 
-        var result = await sut.TryGet(1);
+        var oldestEntry = await sut.TryGet(0);
 
-        result.Item1.Should().BeFalse();
+        oldestEntry.Item1.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(2)]
+    [InlineData(8)]
+    [InlineData(42)]
+    [InlineData(2132)]
+    public async Task Add_ShouldEvict_Only_OldestEntry_WhenSizeLimitIsReached(int sizeLimit)
+    {
+        var sut = new MemoryCache<string>(new CacheOptions {SizeLimit = sizeLimit});
 
+        for (int i = 0; i <= sizeLimit; i++)
+        {
+            await sut.Add(i, $"test entry #{i}");
+        }
+
+        var oldestEntry = await sut.TryGet(0);
+        var secondOldest = await sut.TryGet(1);
+
+        oldestEntry.Item1.Should().BeFalse();
+        secondOldest.Item1.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task New_MemoryCacheWithoutOptions_ShouldHave_NoSizeLimit()
+    {
+        var sut = new MemoryCache<string>();
+        var result = sut.GetPrivateProperty<CacheOptions>("_options");
+        
+        result.SizeLimit.Should().BeNull();
+    }
+
+    
 }
