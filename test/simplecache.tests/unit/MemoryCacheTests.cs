@@ -78,9 +78,11 @@ public class MemoryCacheTests
         await sut.TryGet(1);
         await sut.Add(3, "1");
 
+        var oldestEntry = await sut.TryGet(1);
         var result = await sut.TryGet(2);
 
         result.Item1.Should().BeFalse();
+        oldestEntry.Item1.Should().BeTrue();
     }
 
 }

@@ -6,13 +6,12 @@ public class MemoryCache<T>
 
 {
     private readonly ConcurrentDictionary<object, T> _dictionary;
-    private readonly ConcurrentQueue<object> _keyQueue;
+    private ConcurrentQueue<object> _keyQueue { get; set; } = new();
     private CacheOptions _options { get; init; } = new();
 
     public MemoryCache()
     {
         _dictionary = new();
-        _keyQueue = new();
     }
 
     public MemoryCache(CacheOptions options)
@@ -39,13 +38,21 @@ public class MemoryCache<T>
     public async Task<(bool, T)> TryGet(object key)
     {
         var success = _dictionary.TryGetValue(key, out var value);
+        if (success && _options.EvictionPolicy == Evict.LeastRecentlyUsed)
+            Refresh(key);
         
         return (success, value!);
+    }
+
+    private void Refresh(object key)
+    {
+        _keyQueue = new ConcurrentQueue<object>(_keyQueue.Where(x => !x.Equals(key)));
+        _keyQueue.Enqueue(key);
     }
 
     public async Task<bool> TryPrune()
     {
         _keyQueue.TryDequeue(out var key);
-        return _dictionary.TryRemove(key, out var _);
+        return _dictionary.TryRemove(key, out _);
     }
 }
