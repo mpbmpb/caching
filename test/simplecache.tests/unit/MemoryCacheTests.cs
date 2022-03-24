@@ -60,7 +60,7 @@ public class MemoryCacheTests
     }
 
     [Fact]
-    public async Task New_MemoryCacheWithoutOptions_ShouldHave_NoSizeLimit()
+    public void New_MemoryCacheWithoutOptions_ShouldHave_NoSizeLimit()
     {
         var sut = new MemoryCache<string>();
         var result = sut.GetPrivateProperty<CacheOptions>("_options");
@@ -68,5 +68,19 @@ public class MemoryCacheTests
         result.SizeLimit.Should().BeNull();
     }
 
-    
+    [Fact]
+    public async Task Add_ShouldEvict_LeastRecentlyUsedEntry_WhenThisOptionIsSet()
+    {
+        var sut = new MemoryCache<string>(new CacheOptions { SizeLimit = 2, EvictionPolicy = Evict.LeastRecentlyUsed });
+
+        await sut.Add(1, "1");
+        await sut.Add(2, "1");
+        await sut.TryGet(1);
+        await sut.Add(3, "1");
+
+        var result = await sut.TryGet(2);
+
+        result.Item1.Should().BeFalse();
+    }
+
 }
