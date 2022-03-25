@@ -20,7 +20,7 @@ public class MemoryCache<T>
         _options = options;
     }
     
-    public bool Add(object key, T value)
+    public bool Set(object key, T value)
     {
         if (_dictionary.Count >= _options.SizeLimit)
         {

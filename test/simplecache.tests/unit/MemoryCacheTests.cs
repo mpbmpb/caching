@@ -12,7 +12,7 @@ public class MemoryCacheTests
     {
         var sut = new MemoryCache<T>();
 
-        sut.Add(key, value);
+        sut.Set(key, value);
 
         var success = sut.TryGet(key, out var result);
 
@@ -31,7 +31,7 @@ public class MemoryCacheTests
 
         for (int i = 0; i <= sizeLimit; i++)
         {
-            sut.Add(i, $"test entry #{i}");
+            sut.Set(i, $"test entry #{i}");
         }
 
         var oldestEntry = sut.TryGet(0, out _);
@@ -50,7 +50,7 @@ public class MemoryCacheTests
 
         for (int i = 0; i <= sizeLimit; i++)
         {
-            sut.Add(i, $"test entry #{i}");
+            sut.Set(i, $"test entry #{i}");
         }
 
         var oldestEntry = sut.TryGet(0, out _);
@@ -75,10 +75,10 @@ public class MemoryCacheTests
     {
         var sut = new MemoryCache<string>(new CacheOptions { SizeLimit = 2, EvictionPolicy = Evict.LeastRecentlyUsed });
 
-        sut.Add(1, "1");
-        sut.Add(2, "2");
+        sut.Set(1, "1");
+        sut.Set(2, "2");
         sut.TryGet(1, out _);
-        sut.Add(3, "3");
+        sut.Set(3, "3");
 
         var oldestEntry = sut.TryGet(1, out var result);
         var leastRecentEntry = sut.TryGet(2, out _);
