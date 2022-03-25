@@ -8,15 +8,16 @@ public class MemoryCacheTests
     [InlineData(1, "test value")]
     [InlineData(2, 42)]
     [InlineData("3", typeof(TimeOnly))]
-    public async Task Add_ShouldAddObject_ToCache<T>(object key, T value)
+    public void Add_ShouldAddObject_ToCache<T>(object key, T value)
     {
         var sut = new MemoryCache<T>();
 
-        await sut.Add(key, value);
+        sut.Add(key, value);
 
-        var result = await sut.TryGet(key);
+        var success = sut.TryGet(key, out var result);
 
-        result.Should().Be((true, value));
+        success.Should().BeTrue();
+        result.Should().Be(value);
     }
 
     [Theory]
@@ -24,18 +25,18 @@ public class MemoryCacheTests
     [InlineData(8)]
     [InlineData(42)]
     [InlineData(2132)]
-    public async Task Add_ShouldEvictOldestEntry_WhenSizeLimitIsReached(int sizeLimit)
+    public void Add_ShouldEvictOldestEntry_WhenSizeLimitIsReached(int sizeLimit)
     {
-        var sut = new MemoryCache<string>(new CacheOptions {SizeLimit = 2});
+        var sut = new MemoryCache<string>(new CacheOptions { SizeLimit = 2 });
 
         for (int i = 0; i <= sizeLimit; i++)
         {
-            await sut.Add(i, $"test entry #{i}");
+            sut.Add(i, $"test entry #{i}");
         }
 
-        var oldestEntry = await sut.TryGet(0);
+        var oldestEntry = sut.TryGet(0, out _);
 
-        oldestEntry.Item1.Should().BeFalse();
+        oldestEntry.Should().BeFalse();
     }
 
     [Theory]
@@ -43,20 +44,21 @@ public class MemoryCacheTests
     [InlineData(8)]
     [InlineData(42)]
     [InlineData(2132)]
-    public async Task Add_ShouldEvict_Only_OldestEntry_WhenSizeLimitIsReached(int sizeLimit)
+    public void Add_ShouldEvict_Only_OldestEntry_WhenSizeLimitIsReached(int sizeLimit)
     {
-        var sut = new MemoryCache<string>(new CacheOptions {SizeLimit = sizeLimit});
+        var sut = new MemoryCache<string>(new CacheOptions { SizeLimit = sizeLimit });
 
         for (int i = 0; i <= sizeLimit; i++)
         {
-            await sut.Add(i, $"test entry #{i}");
+            sut.Add(i, $"test entry #{i}");
         }
 
-        var oldestEntry = await sut.TryGet(0);
-        var secondOldest = await sut.TryGet(1);
+        var oldestEntry = sut.TryGet(0, out _);
+        var secondOldest = sut.TryGet(1, out var result);
 
-        oldestEntry.Item1.Should().BeFalse();
-        secondOldest.Item1.Should().BeTrue();
+        oldestEntry.Should().BeFalse();
+        secondOldest.Should().BeTrue();
+        result.Should().Match("test entry #1");
     }
 
     [Fact]
@@ -69,20 +71,21 @@ public class MemoryCacheTests
     }
 
     [Fact]
-    public async Task Add_ShouldEvict_LeastRecentlyUsedEntry_WhenThisOptionIsSet()
+    public void Add_ShouldEvict_LeastRecentlyUsedEntry_WhenThisOptionIsSet()
     {
         var sut = new MemoryCache<string>(new CacheOptions { SizeLimit = 2, EvictionPolicy = Evict.LeastRecentlyUsed });
 
-        await sut.Add(1, "1");
-        await sut.Add(2, "1");
-        await sut.TryGet(1);
-        await sut.Add(3, "1");
+        sut.Add(1, "1");
+        sut.Add(2, "2");
+        sut.TryGet(1, out _);
+        sut.Add(3, "3");
 
-        var oldestEntry = await sut.TryGet(1);
-        var result = await sut.TryGet(2);
+        var oldestEntry = sut.TryGet(1, out var result);
+        var leastRecentEntry = sut.TryGet(2, out _);
 
-        result.Item1.Should().BeFalse();
-        oldestEntry.Item1.Should().BeTrue();
+        leastRecentEntry.Should().BeFalse();
+        oldestEntry.Should().BeTrue();
+        result.Should().Match("1");
     }
 
 }

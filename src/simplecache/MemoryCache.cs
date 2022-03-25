@@ -20,11 +20,11 @@ public class MemoryCache<T>
         _options = options;
     }
     
-    public async Task<bool> Add(object key, T value)
+    public bool Add(object key, T value)
     {
         if (_dictionary.Count >= _options.SizeLimit)
         {
-            var pruned = await TryPrune();
+            var pruned = TryPrune();
             if (!pruned)
                 return false;
         }
@@ -35,13 +35,13 @@ public class MemoryCache<T>
         return success;
     }
 
-    public async Task<(bool, T)> TryGet(object key)
+    public bool TryGet(object key, out T value)
     {
-        var success = _dictionary.TryGetValue(key, out var value);
+        var success = _dictionary.TryGetValue(key, out value!);
         if (success && _options.EvictionPolicy == Evict.LeastRecentlyUsed)
             Refresh(key);
         
-        return (success, value!);
+        return success;
     }
 
     private void Refresh(object key)
@@ -50,9 +50,9 @@ public class MemoryCache<T>
         _keyQueue.Enqueue(key);
     }
 
-    public async Task<bool> TryPrune()
+    public bool TryPrune()
     {
         _keyQueue.TryDequeue(out var key);
-        return _dictionary.TryRemove(key, out _);
+        return _dictionary.TryRemove(key!, out _);
     }
 }
