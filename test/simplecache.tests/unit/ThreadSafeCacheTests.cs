@@ -86,4 +86,16 @@ public class ThreadSafeCacheTests
         result.Should().Match("1");
     }
 
+    [Fact]
+    public void GetOrSet_ShouldSetCache_WhenEntryIsNew()
+    {
+        var sut = new ThreadSafeCache<string>();
+
+        sut.GetOrSet(1, x => "test value");
+
+        sut.TryGet(1, out var result);
+
+        result.Should().Match("test value");
+    }
+
 }

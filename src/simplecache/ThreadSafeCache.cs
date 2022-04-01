@@ -49,6 +49,28 @@ public class ThreadSafeCache<T>
         return success;
     }
 
+    public T? GetOrSet(object key, Func<object,T> dataRetriever)
+    {
+        T? value;
+        var success = false;
+        _cacheLock.EnterUpgradeableReadLock();
+        try
+        {
+            success = _dictionary.TryGetValue(key, out value);
+            if (!success)
+            {
+                value = dataRetriever(key);
+                success = Set(key, value);
+            }
+        }
+        finally
+        {
+            _cacheLock.ExitUpgradeableReadLock();
+        }
+        
+        return success ? value : default;
+    }
+
     private void EnqueueKey(object key)
     {
         _queueLock.EnterWriteLock();
