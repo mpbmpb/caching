@@ -1,4 +1,7 @@
-﻿namespace simplecache.tests.unit;
+﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
+
+namespace simplecache.tests.unit;
 
 public class ThreadSafeCacheTests
 {
@@ -86,16 +89,47 @@ public class ThreadSafeCacheTests
         result.Should().Match("1");
     }
 
-    [Fact]
-    public void GetOrSet_ShouldSetCache_WhenEntryIsNew()
+    [Theory]
+    [InlineData(1, "test value")]
+    [InlineData(2, 42)]
+    [InlineData("3", typeof(TimeOnly))]
+    public void GetOrSet_ShouldSetCache_WhenEntryIsNew<T>(object key, T value)
     {
-        var sut = new ThreadSafeCache<string>();
+        var sut = new ThreadSafeCache<T>();
 
-        sut.GetOrSet(1, x => "test value");
+        sut.GetOrSet(key, x => value);
 
-        sut.TryGet(1, out var result);
+        var success = sut.TryGet(key, out var result);
 
-        result.Should().Match("test value");
+        success.Should().BeTrue();
+        result.Should().Be(value);
     }
 
+    [Fact]
+    public void GetOrSet_ShouldSetOnlyOnce_WithMultipleParallelRequestForThesameObject()
+    {
+        for (int j = 0; j < 100_000; j++)
+        {
+            var sut = new ThreadSafeCache<string>();
+            var cacheLog = new ConcurrentQueue<string>();
+
+            Parallel.For(1, 9, (i) =>
+            {
+                var value = i.ToString();
+                var cached = sut.GetOrSet(1, x => value);
+                if (cached == value)
+                {
+                    cacheLog.Enqueue(value);
+                }
+            });
+
+            sut.TryGet(1, out var result);
+            cacheLog.TryDequeue(out var expected);
+            
+            result.Should().Match(expected);
+            cacheLog.Count.Should().Be(0);
+        }
+    }
+    
+    
 }

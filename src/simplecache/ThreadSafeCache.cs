@@ -49,7 +49,7 @@ public class ThreadSafeCache<T>
         return success;
     }
 
-    public T? GetOrSet(object key, Func<object,T> dataRetriever)
+    public T? GetOrSet(object key, Func<object,T> dataFetcher)
     {
         T? value;
         var success = false;
@@ -59,7 +59,7 @@ public class ThreadSafeCache<T>
             success = _dictionary.TryGetValue(key, out value);
             if (!success)
             {
-                value = dataRetriever(key);
+                value = dataFetcher(key);
                 success = Set(key, value);
             }
         }
