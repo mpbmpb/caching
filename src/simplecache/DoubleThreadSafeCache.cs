@@ -2,7 +2,7 @@
 
 namespace simplecache;
 
-public class ThreadSafeCache<T>
+public class DoubleThreadSafeCache<T>
 {
     private readonly ConcurrentDictionary<object, T> _dictionary;
     private ConcurrentQueue<object> _keyQueue { get; set; } = new();
@@ -10,32 +10,46 @@ public class ThreadSafeCache<T>
     private readonly ReaderWriterLockSlim _cacheLock = new();
     private readonly ReaderWriterLockSlim _queueLock = new();
 
-    public ThreadSafeCache()
+    public DoubleThreadSafeCache()
     {
         _dictionary = new();
     }
 
-    public ThreadSafeCache(CacheOptions options)
+    public DoubleThreadSafeCache(CacheOptions options)
         : this()
     {
         _options = options;
     }
     
+    public int Count => _dictionary.Count;
+
     public bool Set(object key, T value)
     {
+        _cacheLock.EnterWriteLock();
         if (_dictionary.Count >= _options.SizeLimit)
         {
-            var pruned = TryPrune();
+            _queueLock.EnterWriteLock();
+            var pruned = false;
+            try
+            {
+                pruned = TryPrune();
+            }
+            finally
+            {
+                _queueLock.ExitWriteLock();
+                if (!pruned)
+                {
+                    _cacheLock.ExitWriteLock();
+                }                
+            }
             if (!pruned)
                 return false;
         }
 
         var success = false;
-        _cacheLock.EnterWriteLock();
         try
         {
             success =_dictionary.TryAdd(key, value);
-            
         }
         finally
         {
@@ -52,7 +66,7 @@ public class ThreadSafeCache<T>
     public T? GetOrSet(object key, Func<object,T> dataFetcher)
     {
         T? value;
-        var success = false;
+        bool success;
         _cacheLock.EnterUpgradeableReadLock();
         try
         {
@@ -118,20 +132,7 @@ public class ThreadSafeCache<T>
 
     public bool TryPrune()
     {
-        var success = false;
-        _cacheLock.EnterWriteLock();
-        _queueLock.EnterWriteLock();
-        try
-        {
-            _keyQueue.TryDequeue(out var key);
-            success = _dictionary.TryRemove(key!, out _);
-        }
-        finally
-        {
-            _cacheLock.ExitWriteLock();
-            _queueLock.ExitWriteLock();
-        }
-
-        return success;
+        _keyQueue.TryDequeue(out var key); 
+        return _dictionary.TryRemove(key!, out _);
     }
 }

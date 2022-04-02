@@ -19,20 +19,34 @@ public class MemoryCache<T>
     {
         _options = options;
     }
+
+    public int Count => _dictionary.Count;
     
     public bool Set(object key, T value)
     {
-        if (_dictionary.Count >= _options.SizeLimit)
+        var success =_dictionary.TryAdd(key, value);
+        if (success)
+            _keyQueue.Enqueue(key);
+        
+        if (_dictionary.Count > _options.SizeLimit)
         {
             var pruned = TryPrune();
             if (!pruned)
                 return false;
         }
-        var success =_dictionary.TryAdd(key, value);
-        if (success)
-            _keyQueue.Enqueue(key);
         
         return success;
+    }
+    
+    public T? GetOrSet(object key, Func<object,T> dataFetcher)
+    {
+        var success = _dictionary.TryGetValue(key, out var value);
+        if (!success)
+        {
+            value = dataFetcher(key);
+            success = Set(key, value);
+        }
+        return success ? value : default;
     }
 
     public bool TryGet(object key, out T value)

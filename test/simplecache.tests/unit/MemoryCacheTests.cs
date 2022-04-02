@@ -1,4 +1,5 @@
-using System.Reflection;
+using System.Collections.Concurrent;
+using System.Threading;
 
 namespace simplecache.tests.unit;
 
@@ -8,7 +9,7 @@ public class MemoryCacheTests
     [InlineData(1, "test value")]
     [InlineData(2, 42)]
     [InlineData("3", typeof(TimeOnly))]
-    public void Add_ShouldAddObject_ToCache<T>(object key, T value)
+    public void Set_ShouldAddObject_ToCache<T>(object key, T value)
     {
         var sut = new MemoryCache<T>();
 
@@ -25,7 +26,7 @@ public class MemoryCacheTests
     [InlineData(8)]
     [InlineData(42)]
     [InlineData(2132)]
-    public void Add_ShouldEvictOldestEntry_WhenSizeLimitIsReached(int sizeLimit)
+    public void Set_ShouldEvictOldestEntry_WhenSizeLimitIsReached(int sizeLimit)
     {
         var sut = new MemoryCache<string>(new CacheOptions { SizeLimit = 2 });
 
@@ -44,7 +45,7 @@ public class MemoryCacheTests
     [InlineData(8)]
     [InlineData(42)]
     [InlineData(2132)]
-    public void Add_ShouldEvict_Only_OldestEntry_WhenSizeLimitIsReached(int sizeLimit)
+    public void Set_ShouldEvict_Only_OldestEntry_WhenSizeLimitIsReached(int sizeLimit)
     {
         var sut = new MemoryCache<string>(new CacheOptions { SizeLimit = sizeLimit });
 
@@ -71,7 +72,7 @@ public class MemoryCacheTests
     }
 
     [Fact]
-    public void Add_ShouldEvict_LeastRecentlyUsedEntry_WhenThisOptionIsSet()
+    public void Set_ShouldEvict_LeastRecentlyUsedEntry_WhenThisOptionIsSet()
     {
         var sut = new MemoryCache<string>(new CacheOptions { SizeLimit = 2, EvictionPolicy = Evict.LeastRecentlyUsed });
 
@@ -88,4 +89,95 @@ public class MemoryCacheTests
         result.Should().Match("1");
     }
 
+    [Fact]
+    public void GetOrSet_ShouldSetOnlyOnce_WithMultipleParallelRequestForThesameKey()
+    {
+        for (int j = 0; j < 10_000; j++)
+        {
+            var sut = new MemoryCache<string>();
+            var cacheLog = new ConcurrentQueue<string>();
+
+            Parallel.For(1, 9, (i) =>
+            {
+                var value = i.ToString();
+                var cached = sut.GetOrSet(1, x => value);
+                if (cached == value)
+                {
+                    cacheLog.Enqueue(value);
+                }
+            });
+
+            sut.TryGet(1, out var result);
+            cacheLog.TryDequeue(out var expected);
+            
+            result.Should().Match(expected);
+            cacheLog.Count.Should().Be(0);
+        }
+    }
+    
+    [Fact]
+    public void Set_ShouldBe_Threadsafe()
+    {
+        for (int j = 0; j < 10_000; j++)
+        {
+            var sut = new MemoryCache<string>();
+            var errorCount = 0;
+            var cachedCount = 0;
+
+            Parallel.For(1, 9, (i) =>
+            {
+                var success = sut.Set(i, i.ToString());
+                if (!success)
+                    Interlocked.Increment(ref errorCount);
+            });
+
+            for (int i = 1; i < 9; i++)
+            {
+                var success = sut.TryGet(i, out var value);
+                if (!success)
+                    errorCount++;
+                if (value == i.ToString())
+                    cachedCount++;
+            }
+
+            errorCount.Should().Be(0);
+            cachedCount.Should().Be(8);
+        }
+    }
+    
+    [Fact]
+    public void Set_ShouldBe_Threadsafe_WhenPruningCache()
+    {
+        for (int j = 0; j < 10_000; j++)
+        {
+            var sut = new MemoryCache<string>(new CacheOptions(){SizeLimit = 8});
+            var errorCount = 0;
+            var cachedCount = 0;
+
+            for (int i = 11; i < 19; i++)
+            {
+                sut.Set(i, "test value");
+            }
+            
+            Parallel.For(1, 9, (i) =>
+            {
+                var success = sut.Set(i, i.ToString());
+                if (!success)
+                    Interlocked.Increment(ref errorCount);
+            });
+
+            for (int i = 1; i < 9; i++)
+            {
+                var success = sut.TryGet(i, out var value);
+                if (!success)
+                    errorCount++;
+                if (value == i.ToString())
+                    cachedCount++;
+            }
+
+            errorCount.Should().Be(0);
+            cachedCount.Should().Be(8);
+            sut.Count.Should().Be(8);
+        }
+    }
 }
