@@ -1,6 +1,6 @@
 ﻿namespace simplecache;
 
-public class ConcurrentCache<T>
+public class ConcurrentCache<T> : IMemoryCache<T>
 {
     private readonly Dictionary<object, T> _dictionary;
     private Queue<object> _keyQueue { get; set; } = new();
@@ -83,11 +83,26 @@ public class ConcurrentCache<T>
         return success ? value : default;
     }
 
+
     private void EnqueueKey(object key)
     {
         _queueLock.EnterWriteLock();
         try
         {
+            _keyQueue.Enqueue(key);
+        }
+        finally
+        {
+            _queueLock.ExitWriteLock();
+        }
+    }
+
+    private void RefreshKeyQueue(object key)
+    {
+        _queueLock.EnterWriteLock();
+        try
+        {
+            _keyQueue = new (_keyQueue.Where(x => !x.Equals(key)));
             _keyQueue.Enqueue(key);
         }
         finally
@@ -108,27 +123,13 @@ public class ConcurrentCache<T>
         {
             _cacheLock.ExitReadLock();
             if (success && _options.EvictionPolicy == Evict.LeastRecentlyUsed)
-                RefreshQueue(key);
+                RefreshKeyQueue(key);
         }
         
         return success;
     }
 
-    private void RefreshQueue(object key)
-    {
-        _queueLock.EnterWriteLock();
-        try
-        {
-            _keyQueue = new (_keyQueue.Where(x => !x.Equals(key)));
-            _keyQueue.Enqueue(key);
-        }
-        finally
-        {
-            _queueLock.ExitWriteLock();
-        }
-    }
-
-    public bool TryPrune()
+    private bool TryPrune()
     {
         _keyQueue.TryDequeue(out var key); 
         return _dictionary.Remove(key!, out _);

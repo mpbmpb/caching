@@ -2,7 +2,7 @@
 
 namespace simplecache;
 
-public class MemoryCache<T>
+public class MemoryCache<T> : IMemoryCache<T>
 
 {
     private readonly ConcurrentDictionary<object, T> _dictionary;
@@ -53,18 +53,18 @@ public class MemoryCache<T>
     {
         var success = _dictionary.TryGetValue(key, out value!);
         if (success && _options.EvictionPolicy == Evict.LeastRecentlyUsed)
-            Refresh(key);
+            RefreshKeyQueue(key);
         
         return success;
     }
 
-    private void Refresh(object key)
+    private void RefreshKeyQueue(object key)
     {
-        _keyQueue = new ConcurrentQueue<object>(_keyQueue.Where(x => !x.Equals(key)));
+        _keyQueue = new (_keyQueue.Where(x => !x.Equals(key)));
         _keyQueue.Enqueue(key);
     }
 
-    public bool TryPrune()
+    private bool TryPrune()
     {
         _keyQueue.TryDequeue(out var key);
         return _dictionary.TryRemove(key!, out _);

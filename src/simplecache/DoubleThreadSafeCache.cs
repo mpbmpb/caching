@@ -2,7 +2,7 @@
 
 namespace simplecache;
 
-public class DoubleThreadSafeCache<T>
+public class DoubleThreadSafeCache<T> : IMemoryCache<T>
 {
     private readonly ConcurrentDictionary<object, T> _dictionary;
     private ConcurrentQueue<object> _keyQueue { get; set; } = new();
@@ -98,6 +98,20 @@ public class DoubleThreadSafeCache<T>
         }
     }
 
+    private void RefreshKeyQueue(object key)
+    {
+        _queueLock.EnterWriteLock();
+        try
+        {
+            _keyQueue = new (_keyQueue.Where(x => !x.Equals(key)));
+            _keyQueue.Enqueue(key);
+        }
+        finally
+        {
+            _queueLock.ExitWriteLock();
+        }
+    }
+
     public bool TryGet(object key, out T value)
     {
         var success = false;
@@ -110,27 +124,13 @@ public class DoubleThreadSafeCache<T>
         {
             _cacheLock.ExitReadLock();
             if (success && _options.EvictionPolicy == Evict.LeastRecentlyUsed)
-                RefreshQueue(key);
+                RefreshKeyQueue(key);
         }
         
         return success;
     }
 
-    private void RefreshQueue(object key)
-    {
-        _queueLock.EnterWriteLock();
-        try
-        {
-            _keyQueue = new ConcurrentQueue<object>(_keyQueue.Where(x => !x.Equals(key)));
-            _keyQueue.Enqueue(key);
-        }
-        finally
-        {
-            _queueLock.ExitWriteLock();
-        }
-    }
-
-    public bool TryPrune()
+    private bool TryPrune()
     {
         _keyQueue.TryDequeue(out var key); 
         return _dictionary.TryRemove(key!, out _);
