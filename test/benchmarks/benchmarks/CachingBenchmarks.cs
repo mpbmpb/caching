@@ -18,7 +18,7 @@ public class CachingBenchmarks
     public string UrlDump;
 
 
-    [Params(100, 1000)] 
+    [Params(1000)] 
     public int Inserts { get; set; }
 
     [GlobalSetup]
