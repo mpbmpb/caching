@@ -1,10 +1,15 @@
 ﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
+using Bogus;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 
 namespace simplecache.tests.unit;
 
 public class DoubleThreadSafeCacheTests
 {
+    public byte[][] FakeImgData;
+    
     [Theory]
     [InlineData(1, "test value")]
     [InlineData(2, 42)]
@@ -166,7 +171,7 @@ public class DoubleThreadSafeCacheTests
     {
         for (int j = 0; j < 10_000; j++)
         {
-            var sut = new DoubleThreadSafeCache<string>(new CacheOptions(){SizeLimit = 8});
+            var sut = new DoubleThreadSafeCache<string>(new CacheOptions(){ SizeLimit = 8 });
             var errorCount = 0;
             var cachedCount = 0;
 
@@ -194,6 +199,57 @@ public class DoubleThreadSafeCacheTests
             errorCount.Should().Be(0);
             cachedCount.Should().Be(8);
             sut.Count.Should().Be(8);
+        }
+    }
+
+    [Fact]
+    public void Multithreaded_StressTest_AllCaches_ShouldBe_SetCorrectly()
+    {
+        StressTestSetup();
+        var sut = new DoubleThreadSafeCache<byte[]>(new CacheOptions(){ SizeLimit = 5_000 });
+        var success = false;
+
+        Parallel.For(0, 5_000, (i) =>
+        {
+            success = sut.Set(i, FakeImgData[i]);
+            if (!success) 
+                throw new TestCanceledException("A failure occurred trying to set the cache, the test has failed.");
+        });
+
+        sut.Count.Should().Be(5_000);
+        
+        // The next part will test thread safety while setting a cache that prunes itself
+        Parallel.For(5_000, 10_000, (i) =>
+        {
+            success = sut.Set(i, FakeImgData[i]);
+            if (!success) throw new TestCanceledException("A failure occurred trying to set the cache, the test has failed.");
+        });
+        
+        sut.Count.Should().Be(5_000);
+
+        var checkList = new List<byte[]>();
+
+        for (int i = 5_000; i < 10_000; i++)
+        {
+            success = sut.TryGet(i, out var value);
+            if (!success) 
+                throw new TestCanceledException($"A failure occurred trying to get the cache for key {i}, the test has failed.");
+            checkList.Add(value);
+        }
+
+        checkList.Should().BeEquivalentTo(FakeImgData[5_000..]);
+    }
+
+    private void StressTestSetup()
+    {
+        FakeImgData = new byte[10_000][];
+        var rnd = new Random();
+
+        for (int i = 0; i < 10_000; i++)
+        {
+            var arr = new byte[180_000];
+            rnd.NextBytes(arr);
+            FakeImgData[i] = arr;
         }
     }
 }
